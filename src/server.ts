@@ -80,15 +80,18 @@ server.post('/api/login/is_login', (req, res) => {
     } = {
         access_token: req.body.access_token
     };
+    try {
+        jwt.verify(payload.access_token, JWT_SECRET_KEY);
+        res.status(200).json({status, message});
+    } catch (err) {
+        const status = 401;
+        let message = 'Error verify access_token';
 
-    jwt.verify(payload.access_token, JWT_SECRET_KEY, function (err) {
-        if (err) {
-            const status = 401;
-            const message = err.message;
-            res.status(status).json({status, message});
+        if (err instanceof JsonWebTokenError) {
+            message = err.message;
         }
-    });
-    res.status(200).json({status, message});
+        res.status(status).json({status, message});
+    }
 });
 
 server.use(/^(?!\/auth).*$/, (req, res, next) => {
