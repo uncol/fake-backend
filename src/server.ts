@@ -1,13 +1,13 @@
-import * as bodyParser from "body-parser";
-import * as cookieParser from "cookie-parser";
+import * as bodyParser from 'body-parser';
+import * as cookieParser from 'cookie-parser';
 
-import { create, defaults, router as jsonRouter } from "json-server";
-import * as jwt from "jsonwebtoken";
-import { join } from "path";
-import { TedisPool } from "tedis";
-import { v4 as uuidv4 } from "uuid";
+import { create, defaults, router as jsonRouter } from 'json-server';
+import * as jwt from 'jsonwebtoken';
+import { join } from 'path';
+import { TedisPool } from 'tedis';
+import { v4 as uuidv4 } from 'uuid';
 
-import { TokensGenerator } from "./generator";
+import { TokensGenerator } from './generator';
 
 export interface config {
   secret_key: string;
@@ -18,15 +18,15 @@ export interface config {
 const PORT = process.env.PORT ?? 3000;
 const DATA_PATH =
   process.env.DATA_PATH ?? __dirname.slice(process.cwd().length + 1);
-const DATA_NAME = process.env.DATA_NAME ?? "api.db.json";
+const DATA_NAME = process.env.DATA_NAME ?? 'api.db.json';
 const JWT: config = {
-  secret_key: process.env.JWT_SECRET_KEY ?? "SecretKey",
-  access_token_expires_in: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN ?? "1h",
+  secret_key: process.env.JWT_SECRET_KEY ?? 'SecretKey',
+  access_token_expires_in: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN ?? '1h',
   refresh_token_expires_in: Number(
-    process.env.JWT_REFRESH_TOKEN_EXPIRES_IN ?? 60
+    process.env.JWT_REFRESH_TOKEN_EXPIRES_IN ?? 60,
   ), // 2592000000 => 30 day
 };
-const COOKIE_NAME = "refreshToken";
+const COOKIE_NAME = 'refreshToken';
 
 const server = create();
 
@@ -34,7 +34,7 @@ const router = jsonRouter(join(DATA_PATH, DATA_NAME));
 const middlewares = defaults();
 
 const tedispool = new TedisPool({
-  host: "127.0.0.1",
+  host: '127.0.0.1',
   port: 6379,
 });
 
@@ -43,7 +43,7 @@ server.use(bodyParser.json());
 server.use(cookieParser.default());
 server.use(middlewares);
 
-server.post("/api/login/token", async (req, res) => {
+server.post('/api/login/token', async (req, res) => {
   const payload: {
     username: string;
     password: string;
@@ -60,15 +60,15 @@ server.post("/api/login/token", async (req, res) => {
   const tedis = await tedispool.getTedis();
 
   switch (payload.grant_type) {
-    case "password": {
+    case 'password': {
       const user: { id: number; username: string; password: string } | null =
-        (router.db.get("users") as any)
+        (router.db.get('users') as any)
           .find({ username: payload.username, password: payload.password })
           .value() ?? null;
 
       if (user) {
         const newRefreshToken = uuidv4();
-        const data = { visitorId: payload.visitorId ?? "undefined", username: payload.username ?? "undefined"};
+        const data = { visitorId: payload.visitorId ?? 'undefined', username: payload.username ?? 'undefined' };
 
         await tedis.hmset(newRefreshToken, data);
         await tedis.expire(newRefreshToken, JWT.refresh_token_expires_in);
@@ -76,18 +76,18 @@ server.post("/api/login/token", async (req, res) => {
           .status(200)
           .cookie(COOKIE_NAME, newRefreshToken, {
             httpOnly: true,
-            path: "/api/login",
+            path: '/api/login',
             maxAge: JWT.refresh_token_expires_in,
           })
           .json(TokensGenerator(user.username, JWT));
       } else {
         const status = 401;
-        const message = "Incorrect username or password";
+        const message = 'Incorrect username or password';
         res.status(status).json({ status, message });
       }
       break;
     }
-    case "refresh_token": {
+    case 'refresh_token': {
       const newRefreshToken = uuidv4();
       const oldRefreshToken = req.cookies[COOKIE_NAME];
       let object: string | jwt.JwtPayload;
@@ -98,13 +98,13 @@ server.post("/api/login/token", async (req, res) => {
           .status(200)
           .cookie(COOKIE_NAME, newRefreshToken, {
             httpOnly: true,
-            path: "/api/login",
+            path: '/api/login',
             maxAge: JWT.refresh_token_expires_in,
           })
           .json(TokensGenerator(object.sub, JWT));
       } catch (error) {
         const status = 401;
-        const message = "Error invalid access_token";
+        const message = 'Error invalid access_token';
         res.status(status).json({ status, message });
       }
       break;
@@ -115,13 +115,13 @@ server.post("/api/login/token", async (req, res) => {
   tedispool.putTedis(tedis);
 });
 
-server.post("/api/login/revoke", (req, res) => {
-  res.status(200).json({ message: "Ok", status: true });
+server.post('/api/login/revoke', (req, res) => {
+  res.status(200).json({ message: 'Ok', status: true });
 });
 
-server.post("/api/login/is_login", (req, res) => {
+server.post('/api/login/is_login', (req, res) => {
   const status = 200;
-  const message = "Ok";
+  const message = 'Ok';
   const payload: {
     access_token: string;
   } = {
@@ -132,7 +132,7 @@ server.post("/api/login/is_login", (req, res) => {
     res.status(200).json({ status, message });
   } catch (err) {
     const status = 401;
-    let message = "Error verify access_token";
+    let message = 'Error verify access_token';
 
     if (err instanceof jwt.JsonWebTokenError) {
       message = err.message;
@@ -144,20 +144,20 @@ server.post("/api/login/is_login", (req, res) => {
 server.use(/^(?!\/auth).*$/, (req, res, next) => {
   if (
     req.headers.authorization === undefined ||
-    req.headers.authorization.split(" ")[0] !== "Bearer"
+    req.headers.authorization.split(' ')[0] !== 'Bearer'
   ) {
     const status = 401;
-    const message = "Error in authorization format";
+    const message = 'Error in authorization format';
     res.status(status).json({ status, message });
     return;
   }
   try {
-    const token = req.headers.authorization.split(" ")[1];
+    const token = req.headers.authorization.split(' ')[1];
     jwt.verify(token, JWT.secret_key);
     next();
   } catch (err) {
     const status = 401;
-    let message = "Error verify access_token";
+    let message = 'Error verify access_token';
 
     if (err instanceof jwt.JsonWebTokenError) {
       message = err.message;
