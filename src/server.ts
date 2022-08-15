@@ -1,170 +1,34 @@
 import * as bodyParser from 'body-parser';
 import * as cookieParser from 'cookie-parser';
 
-import { create, defaults, router as jsonRouter } from 'json-server';
-import * as jwt from 'jsonwebtoken';
-import { join } from 'path';
-import { TedisPool } from 'tedis';
-import { v4 as uuidv4 } from 'uuid';
+import { create, defaults } from 'json-server';
+import dotenv from 'dotenv';
+import fs from 'fs';
 
-import { TokensGenerator } from './generator';
-
-export interface config {
-  secret_key: string;
-  access_token_expires_in: string;
-  refresh_token_expires_in: number;
-}
-
-const PORT = process.env.PORT ?? 3000;
-const DATA_PATH =
-  process.env.DATA_PATH ?? __dirname.slice(process.cwd().length + 1);
-const DATA_NAME = process.env.DATA_NAME ?? 'api.db.json';
-const JWT: config = {
-  secret_key: process.env.JWT_SECRET_KEY ?? 'SecretKey',
-  access_token_expires_in: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN ?? '1h',
-  refresh_token_expires_in: Number(
-    process.env.JWT_REFRESH_TOKEN_EXPIRES_IN ?? 60,
-  ), // 2592000000 => 30 day
-};
-const COOKIE_NAME = 'refreshToken';
+import { isAuth, login, revoke } from './controllers/tokens';
+import { PORT } from './config';
+import { router } from './controllers/router';
+import { initPool } from './utils/cache';
+import { checkAuth } from './middleware/auth';
 
 const server = create();
-
-const router = jsonRouter(join(DATA_PATH, DATA_NAME));
 const middlewares = defaults();
 
-const tedispool = new TedisPool({
-  host: '127.0.0.1',
-  port: 6379,
-});
+if (fs.existsSync('.env')) {
+  dotenv.config({ path: '.env' });
+}
 
+initPool();
 server.use(bodyParser.urlencoded({ extended: true }));
 server.use(bodyParser.json());
 server.use(cookieParser.default());
 server.use(middlewares);
 
-server.post('/api/login/token', async (req, res) => {
-  const payload: {
-    username: string;
-    password: string;
-    grant_type: string;
-    refresh_token: string;
-    visitorId: string;
-  } = {
-    username: req.body.username,
-    password: req.body.password,
-    refresh_token: req.body.refresh_token,
-    grant_type: req.body.grant_type,
-    visitorId: req.body.visitorId,
-  };
-  const tedis = await tedispool.getTedis();
+server.post('/api/login/token', login);
+server.post('/api/login/revoke', revoke);
+server.post('/api/login/is_login', isAuth);
 
-  switch (payload.grant_type) {
-    case 'password': {
-      const user: { id: number; username: string; password: string } | null =
-        (router.db.get('users') as any)
-          .find({ username: payload.username, password: payload.password })
-          .value() ?? null;
-
-      if (user) {
-        const newRefreshToken = uuidv4();
-        const data = { visitorId: payload.visitorId ?? 'undefined', username: payload.username ?? 'undefined' };
-
-        await tedis.hmset(newRefreshToken, data);
-        await tedis.expire(newRefreshToken, JWT.refresh_token_expires_in);
-        res
-          .status(200)
-          .cookie(COOKIE_NAME, newRefreshToken, {
-            httpOnly: true,
-            path: '/api/login',
-            maxAge: JWT.refresh_token_expires_in,
-          })
-          .json(TokensGenerator(user.username, JWT));
-      } else {
-        const status = 401;
-        const message = 'Incorrect username or password';
-        res.status(status).json({ status, message });
-      }
-      break;
-    }
-    case 'refresh_token': {
-      const newRefreshToken = uuidv4();
-      const oldRefreshToken = req.cookies[COOKIE_NAME];
-      let object: string | jwt.JwtPayload;
-
-      try {
-        object = jwt.verify(payload.refresh_token, JWT.secret_key);
-        res
-          .status(200)
-          .cookie(COOKIE_NAME, newRefreshToken, {
-            httpOnly: true,
-            path: '/api/login',
-            maxAge: JWT.refresh_token_expires_in,
-          })
-          .json(TokensGenerator(object.sub, JWT));
-      } catch (error) {
-        const status = 401;
-        const message = 'Error invalid access_token';
-        res.status(status).json({ status, message });
-      }
-      break;
-    }
-    default:
-      break;
-  }
-  tedispool.putTedis(tedis);
-});
-
-server.post('/api/login/revoke', (req, res) => {
-  res.status(200).json({ message: 'Ok', status: true });
-});
-
-server.post('/api/login/is_login', (req, res) => {
-  const status = 200;
-  const message = 'Ok';
-  const payload: {
-    access_token: string;
-  } = {
-    access_token: req.body.access_token,
-  };
-  try {
-    jwt.verify(payload.access_token, JWT.secret_key);
-    res.status(200).json({ status, message });
-  } catch (err) {
-    const status = 401;
-    let message = 'Error verify access_token';
-
-    if (err instanceof jwt.JsonWebTokenError) {
-      message = err.message;
-    }
-    res.status(status).json({ status, message });
-  }
-});
-
-server.use(/^(?!\/auth).*$/, (req, res, next) => {
-  if (
-    req.headers.authorization === undefined ||
-    req.headers.authorization.split(' ')[0] !== 'Bearer'
-  ) {
-    const status = 401;
-    const message = 'Error in authorization format';
-    res.status(status).json({ status, message });
-    return;
-  }
-  try {
-    const token = req.headers.authorization.split(' ')[1];
-    jwt.verify(token, JWT.secret_key);
-    next();
-  } catch (err) {
-    const status = 401;
-    let message = 'Error verify access_token';
-
-    if (err instanceof jwt.JsonWebTokenError) {
-      message = err.message;
-    }
-    res.status(status).json({ status, message });
-  }
-});
+server.use(/^(?!\/auth).*$/, checkAuth());
 server.use(router);
 
 server.listen(PORT, () => {

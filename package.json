@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start:api": "ts-node src/server.ts"
+    "start:api": "ts-node src/server.ts",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "format:write": "prettier --write \"src/**/*.ts\""
   },
   "author": "uncol",
   "license": "ISC",
@@ -25,6 +27,7 @@
   },
   "dependencies": {
     "cookie-parser": "^1.4.6",
+    "dotenv": "^16.0.1",
     "tedis": "^0.1.12",
     "uuid": "^8.3.2"
   }
