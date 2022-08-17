@@ -5,11 +5,11 @@ import { create, defaults } from 'json-server';
 import dotenv from 'dotenv';
 import fs from 'fs';
 
-import { isAuth, login, revoke } from './controllers/tokens';
 import { PORT } from './config';
 import { router } from './controllers/router';
-import { initPool } from './utils/cache';
+import { isAuth, login, revoke } from './controllers/tokens';
 import { checkAuth } from './middleware/auth';
+import { initPool } from './utils/cache';
 
 const server = create();
 const middlewares = defaults();

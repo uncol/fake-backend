@@ -12,6 +12,6 @@ export const JWT: Config = {
   secret_key: process.env.JWT_SECRET_KEY ?? 'SecretKey',
   access_token_expires_in: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN ?? '1h',
   refresh_token_expires_in: Number(
-    process.env.JWT_REFRESH_TOKEN_EXPIRES_IN ?? 60,
+    process.env.JWT_REFRESH_TOKEN_EXPIRES_IN ?? 600,
   ), // 2592000000 => 30 day
 };

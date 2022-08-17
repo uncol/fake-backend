@@ -2,7 +2,7 @@ import * as jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 
 import { getConnection, revokeConnection } from '../utils/cache';
-import { TokensGenerator } from '../utils/generator';
+import { Tokens, TokensGenerator } from '../utils/generator';
 import { JWT } from '../config';
 import { getUsers } from './router';
 
@@ -13,29 +13,32 @@ export async function login(req, res) {
     username: string;
     password: string;
     grant_type: string;
-    refresh_token: string;
     visitorId: string;
   } = {
     username: req.body.username,
     password: req.body.password,
-    refresh_token: req.body.refresh_token,
     grant_type: req.body.grant_type,
     visitorId: req.body.visitorId,
   };
 
   switch (payload.grant_type) {
     case 'password': {
-      const user: { id: number; username: string; password: string } | null = getUsers(payload.username, payload.password);
-
+      const user: { id: number; username: string; password: string } | null =
+        getUsers(payload.username, payload.password);
       if (user) {
         const newRefreshToken = uuidv4();
+        const token: Tokens = TokensGenerator(user.username, JWT);
         const data = {
           visitorId: payload.visitorId ?? 'undefined',
           username: payload.username ?? 'undefined',
+          accessToken: token.access,
         };
 
         await dbConnection.hmset(newRefreshToken, data);
-        await dbConnection.expire(newRefreshToken, JWT.refresh_token_expires_in);
+        await dbConnection.expire(
+          newRefreshToken,
+          JWT.refresh_token_expires_in,
+        );
         res
           .status(200)
           .cookie(COOKIE_NAME, newRefreshToken, {
@@ -46,8 +49,9 @@ export async function login(req, res) {
           .json(TokensGenerator(user.username, JWT));
       } else {
         const status = 401;
-        const message = 'Incorrect username or password';
-        res.status(status).json({ status, message });
+        res
+          .status(status)
+          .json({ status, message: 'Incorrect username or password' });
       }
       break;
     }
@@ -57,7 +61,44 @@ export async function login(req, res) {
       let object: string | jwt.JwtPayload;
 
       try {
-        object = jwt.verify(payload.refresh_token, JWT.secret_key);
+        if (!oldRefreshToken) {
+          const status = 401;
+          res
+            .status(status)
+            .json({ status, message: 'refresh token must be provided' });
+          return;
+        }
+        if (!(await dbConnection.exists(oldRefreshToken))) {
+          const status = 401;
+          res.status(status).json({ status, message: 'invalid refresh token' });
+          return;
+        }
+        const visitorId = await dbConnection.hmget(
+          oldRefreshToken,
+          'visitorId',
+        );
+        if (
+          visitorId &&
+          visitorId.length &&
+          visitorId[0] !== payload.visitorId
+        ) {
+          const status = 401;
+          res.status(status).json({ status, message: 'invalid visitorId' });
+          return;
+        }
+        const accessToken = await dbConnection.hmget(
+          oldRefreshToken,
+          'accessToken',
+        );
+        if (accessToken && accessToken.length) {
+          object = jwt.verify(accessToken[0], JWT.secret_key);
+        }
+        const username = await dbConnection.hmget(oldRefreshToken, 'username');
+        if (username && username.length && object.sub !== username[0]) {
+          const status = 401;
+          res.status(status).json({ status, message: 'invalid username' });
+          return;
+        }
         res
           .status(200)
           .cookie(COOKIE_NAME, newRefreshToken, {
@@ -68,7 +109,7 @@ export async function login(req, res) {
           .json(TokensGenerator(object.sub, JWT));
       } catch (error) {
         const status = 401;
-        const message = 'Error invalid access_token';
+        const message = error.message ?? 'invalid access_token';
         res.status(status).json({ status, message });
       }
       break;
