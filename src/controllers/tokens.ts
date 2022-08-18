@@ -6,8 +6,9 @@ import { Tokens, TokensGenerator } from '../utils/generator';
 import { JWT } from '../config';
 import { getUsers } from './router';
 
+const COOKIE_NAME = 'refreshToken';
+
 export async function login(req, res) {
-  const COOKIE_NAME = 'refreshToken';
   const dbConnection = await getConnection();
   const payload: {
     username: string;
@@ -46,7 +47,7 @@ export async function login(req, res) {
             path: '/api/login',
             maxAge: JWT.refresh_token_expires_in,
           })
-          .json(TokensGenerator(user.username, JWT));
+          .json(token);
       } else {
         const status = 401;
         res
@@ -61,31 +62,7 @@ export async function login(req, res) {
       let object: string | jwt.JwtPayload;
 
       try {
-        if (!oldRefreshToken) {
-          const status = 401;
-          res
-            .status(status)
-            .json({ status, message: 'refresh token must be provided' });
-          return;
-        }
-        if (!(await dbConnection.exists(oldRefreshToken))) {
-          const status = 401;
-          res.status(status).json({ status, message: 'invalid refresh token' });
-          return;
-        }
-        const visitorId = await dbConnection.hmget(
-          oldRefreshToken,
-          'visitorId',
-        );
-        if (
-          visitorId &&
-          visitorId.length &&
-          visitorId[0] !== payload.visitorId
-        ) {
-          const status = 401;
-          res.status(status).json({ status, message: 'invalid visitorId' });
-          return;
-        }
+        await checkRefreshAndVisitorId(req, res, dbConnection);
         const accessToken = await dbConnection.hmget(
           oldRefreshToken,
           'accessToken',
@@ -99,6 +76,14 @@ export async function login(req, res) {
           res.status(status).json({ status, message: 'invalid username' });
           return;
         }
+        const token: Tokens = TokensGenerator(object.sub, JWT);
+        const data = {
+          visitorId: payload.visitorId ?? 'undefined',
+          username: object.sub ?? 'undefined',
+          accessToken: token.access,
+        };
+
+        await dbConnection.hmset(newRefreshToken, data);
         res
           .status(200)
           .cookie(COOKIE_NAME, newRefreshToken, {
@@ -106,9 +91,10 @@ export async function login(req, res) {
             path: '/api/login',
             maxAge: JWT.refresh_token_expires_in,
           })
-          .json(TokensGenerator(object.sub, JWT));
+          .json(token);
+        await deleteToken(oldRefreshToken);
       } catch (error) {
-        const status = 401;
+        const status = error.status ?? 401;
         const message = error.message ?? 'invalid access_token';
         res.status(status).json({ status, message });
       }
@@ -120,8 +106,18 @@ export async function login(req, res) {
   revokeConnection(dbConnection);
 }
 
-export function revoke(req, res) {
-  res.status(200).json({ message: 'Ok', status: true });
+export async function revoke(req, res) {
+  const dbConnection = await getConnection();
+  try{
+    await checkRefreshAndVisitorId(req, res, dbConnection);
+    await deleteToken(req.cookies[COOKIE_NAME]);
+    res.status(200).json({ message: 'Ok', status: true });
+  } catch (error) {
+    res.status(401).json(error);
+  }
+  finally {
+    revokeConnection(dbConnection);
+  }
 }
 
 export function isAuth(req, res) {
@@ -144,4 +140,43 @@ export function isAuth(req, res) {
     }
     res.status(status).json({ status, message });
   }
+}
+
+async function checkRefreshAndVisitorId(req, res, dbConnection) {
+  const oldRefreshToken = req.cookies[COOKIE_NAME];
+  const payload: {
+    visitorId: string;
+  } = {
+    visitorId: req.body.visitorId,
+  };
+
+  if (!oldRefreshToken) {
+    throw { status: 401, message: 'refresh token must be provided' };
+  }
+
+  if (!(await dbConnection.exists(oldRefreshToken))) {
+    throw { status: 401, message: 'invalid refresh token' };
+  }
+  const visitorId = await dbConnection.hmget(
+      oldRefreshToken,
+      'visitorId',
+  );
+  if (
+      visitorId &&
+      visitorId.length &&
+      visitorId[0] !== payload.visitorId
+  ) {
+    const status = 401;
+    throw { status, message: 'invalid visitorId' };
+  }
+}
+
+async function deleteToken(refreshToken) {
+  const dbConnection = await getConnection();
+  const keys: string[] = await dbConnection.hkeys(refreshToken);
+
+  for (const key of keys) {
+    await dbConnection.hdel(refreshToken, key);
+  }
+  revokeConnection(dbConnection);
 }
