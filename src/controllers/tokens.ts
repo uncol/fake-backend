@@ -1,5 +1,6 @@
 import * as jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
+import { Tedis } from 'tedis';
 
 import { getConnection, revokeConnection } from '../utils/cache';
 import { Tokens, TokensGenerator } from '../utils/generator';
@@ -28,18 +29,7 @@ export async function login(req, res) {
         getUsers(payload.username, payload.password);
       if (user) {
         const newRefreshToken = uuidv4();
-        const token: Tokens = TokensGenerator(user.username, JWT);
-        const data = {
-          visitorId: payload.visitorId ?? 'undefined',
-          username: payload.username ?? 'undefined',
-          accessToken: token.access,
-        };
-
-        await dbConnection.hmset(newRefreshToken, data);
-        await dbConnection.expire(
-          newRefreshToken,
-          JWT.refresh_token_expires_in,
-        );
+        const token = await cacheTokens(payload.username, payload.visitorId, dbConnection, newRefreshToken);
         res
           .status(200)
           .cookie(COOKIE_NAME, newRefreshToken, {
@@ -76,14 +66,7 @@ export async function login(req, res) {
           res.status(status).json({ status, message: 'invalid username' });
           return;
         }
-        const token: Tokens = TokensGenerator(object.sub, JWT);
-        const data = {
-          visitorId: payload.visitorId ?? 'undefined',
-          username: object.sub ?? 'undefined',
-          accessToken: token.access,
-        };
-
-        await dbConnection.hmset(newRefreshToken, data);
+        const token = await cacheTokens(username[0], req.body.visitorId, dbConnection, newRefreshToken);
         res
           .status(200)
           .cookie(COOKIE_NAME, newRefreshToken, {
@@ -180,3 +163,20 @@ async function deleteToken(refreshToken) {
   }
   revokeConnection(dbConnection);
 }
+
+async function cacheTokens(username: string, visitorId: string, dbConnection: Tedis, newRefreshToken: string) {
+  const token: Tokens = TokensGenerator(username, JWT);
+  const data = {
+    visitorId: visitorId ?? 'undefined',
+    username: username ?? 'undefined',
+    accessToken: token.access
+  };
+
+  await dbConnection.hmset(newRefreshToken, data);
+  await dbConnection.expire(
+      newRefreshToken,
+      JWT.refresh_token_expires_in
+  );
+  return token;
+}
+
