@@ -4,7 +4,7 @@ import { Config } from '../config';
 
 export interface Tokens {
   access: string;
-  expires_in: string;
+  expires_in: number;
   type: string;
 }
 
