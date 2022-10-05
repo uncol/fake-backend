@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start:api": "ts-node src/server.ts",
+    "start:api": "ts-node src/server.ts --routes src/routes.json",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "format:write": "prettier --write \"src/**/*.ts\""
   },

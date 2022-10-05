@@ -8,6 +8,7 @@ import { JWT } from '../config';
 import { getUsers } from './router';
 
 const COOKIE_NAME = 'refreshToken';
+const COOKIE_PATH = '/api/login';
 
 export async function login(req, res) {
   const dbConnection = await getConnection();
@@ -34,7 +35,7 @@ export async function login(req, res) {
           .status(200)
           .cookie(COOKIE_NAME, newRefreshToken, {
             httpOnly: true,
-            path: '/api/login',
+            path: COOKIE_PATH,
             maxAge: JWT.refresh_token_expires_in,
           })
           .json(token);
@@ -71,7 +72,7 @@ export async function login(req, res) {
           .status(200)
           .cookie(COOKIE_NAME, newRefreshToken, {
             httpOnly: true,
-            path: '/api/login',
+            path: COOKIE_PATH,
             maxAge: JWT.refresh_token_expires_in,
           })
           .json(token);
