@@ -1,7 +1,7 @@
 import * as bodyParser from 'body-parser';
 import * as cookieParser from 'cookie-parser';
 
-import { create, defaults } from 'json-server';
+import { create, defaults, rewriter } from 'json-server';
 import dotenv from 'dotenv';
 import fs from 'fs';
 
@@ -19,6 +19,9 @@ if (fs.existsSync('.env')) {
 }
 
 initPool();
+server.use(rewriter({
+  "/api/data/*": "/$1"
+}))
 server.use(bodyParser.urlencoded({ extended: true }));
 server.use(bodyParser.json());
 server.use(cookieParser.default());

@@ -170,7 +170,7 @@ async function cacheTokens(username: string, visitorId: string, dbConnection: Te
   const data = {
     visitorId: visitorId ?? 'undefined',
     username: username ?? 'undefined',
-    accessToken: token.access
+    accessToken: token.access_token
   };
 
   await dbConnection.hmset(newRefreshToken, data);
