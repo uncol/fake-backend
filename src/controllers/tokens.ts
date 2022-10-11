@@ -50,7 +50,6 @@ export async function login(req, res) {
     case 'refresh_token': {
       const newRefreshToken = uuidv4();
       const oldRefreshToken = req.cookies[COOKIE_NAME];
-      let object: string | jwt.JwtPayload;
 
       try {
         await checkRefreshAndVisitorId(req, res, dbConnection);
@@ -58,11 +57,9 @@ export async function login(req, res) {
           oldRefreshToken,
           'accessToken',
         );
-        if (accessToken && accessToken.length) {
-          object = jwt.verify(accessToken[0], JWT.secret_key);
-        }
+        const tokenPayload = JSON.parse(Buffer.from(accessToken[0].split('.')[1], 'base64').toString('ascii'));
         const username = await dbConnection.hmget(oldRefreshToken, 'username');
-        if (username && username.length && object.sub !== username[0]) {
+        if (username && username.length && tokenPayload.sub !== username[0]) {
           const status = 401;
           res.status(status).json({ status, message: 'invalid username' });
           return;

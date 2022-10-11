@@ -10,7 +10,7 @@ export const DATA_PATH =
 export const DATA_NAME = process.env.DATA_NAME ?? 'api.db.json';
 export const JWT: Config = {
   secret_key: process.env.JWT_SECRET_KEY ?? 'SecretKey',
-  access_token_expires_in: Number(process.env.JWT_ACCESS_TOKEN_EXPIRES_IN ?? 3600),
+  access_token_expires_in: Number(process.env.JWT_ACCESS_TOKEN_EXPIRES_IN ?? 60),
   refresh_token_expires_in: Number(
     process.env.JWT_REFRESH_TOKEN_EXPIRES_IN ?? 2592000000,
   ), // 2592000000 => 30 day
