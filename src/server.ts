@@ -1,9 +1,14 @@
-import * as bodyParser from 'body-parser';
-import * as cookieParser from 'cookie-parser';
-
-import { create, defaults, rewriter } from 'json-server';
 import dotenv from 'dotenv';
 import fs from 'fs';
+
+if (fs.existsSync('.env')) {
+  dotenv.config({ path: '.env' });
+}
+
+import * as bodyParser from 'body-parser';
+
+import * as cookieParser from 'cookie-parser';
+import { create, defaults, rewriter } from 'json-server';
 
 import { PORT } from './config';
 import { router } from './controllers/router';
@@ -13,10 +18,6 @@ import { initPool } from './utils/cache';
 
 const server = create();
 const middlewares = defaults();
-
-if (fs.existsSync('.env')) {
-  dotenv.config({ path: '.env' });
-}
 
 initPool();
 server.use(rewriter({

@@ -1,5 +1,5 @@
 {
-  "name": "noc-backend-fake",
+  "name": "noc-fake-api",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
